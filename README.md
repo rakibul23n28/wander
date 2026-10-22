@@ -1,124 +1,157 @@
-# Wander Journal
+<div align="center">
 
-A full-stack blog application with a React + Vite frontend and a NestJS + Prisma + Supabase backend. It supports public reading, post management, protected owner-only routes, media uploads, contact, and newsletter subscriptions.
+# wander.
 
-## Project structure
+### A journal of places, people, and little things.
 
-- `src/` — React frontend application
-- `blog-api/` — NestJS API backend
-- `public/` — static assets
-- `.env.example` — frontend API URL example
-- `blog-api/.env` — backend environment configuration
+**A full-stack travel blog built with React, Vite, NestJS, Prisma, and Supabase.**
 
-## Stack
+[Explore the app](#-getting-started) · [Frontend](#-frontend) · [API](#-api)
 
-- Frontend: React, Vite, TypeScript, Tailwind CSS
-- Backend: NestJS, Prisma, PostgreSQL/Supabase
-- Auth: JWT-based owner login
-- Media: API-backed image/video uploads
+</div>
 
-## Prerequisites
+<p align="center">
+  <img src="./public/home.jpeg" alt="Wander Journal home page with a blue tile-wall layout and travel stories" width="100%">
+</p>
 
-- Node.js 22+
+## The idea
+
+Wander is a personal journal for thoughtful travel stories and everyday discoveries. Its tile-wall interface brings editorial content to life, while an owner workspace supports drafting and publishing stories.
+
+The repository contains the React frontend and a separate NestJS API in `blog-api/`.
+
+## At a glance
+
+| Public journal | Owner workspace | Full-stack |
+|:---:|:---:|:---:|
+| Story discovery, categories, and search | Login, drafts, editing, and publishing | REST API, PostgreSQL, and media services |
+
+## Screens from the journal
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="./public/home.jpeg" alt="Wander Journal home page" width="100%">
+      <p align="center"><strong>Discover stories</strong></p>
+    </td>
+    <td width="50%">
+      <img src="./public/blog-details.jpeg" alt="A Wander Journal story page" width="100%">
+      <p align="center"><strong>Read the journey</strong></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="./public/create-edit.jpeg" alt="Wander Journal story editor" width="100%">
+      <p align="center"><strong>Write and manage posts</strong></p>
+    </td>
+  </tr>
+</table>
+
+## Built with
+
+**Frontend**  
+React · TypeScript · Vite · Tailwind CSS · React Router · TipTap
+
+**Backend**  
+NestJS · Prisma · PostgreSQL · Supabase
+
+## Features
+
+- Tile-wall home page and responsive editorial layouts
+- Blog search, categories, sorting, and post pages
+- Owner login with protected writing and management routes
+- Draft and publish workflows, featured stories, and view counts
+- Image and video upload integration
+- Contact form and newsletter signup
+- API URL configurable through `VITE_API_URL`
+
+## Getting started
+
+### Requirements
+
+- Node.js 22 or newer
 - npm
-- A working Supabase/PostgreSQL database
-- Access to the project `.env` values for the backend
+- A configured PostgreSQL/Supabase database for the API
+- Backend environment values (keep secrets private)
 
-## Environment setup
+### 1. Configure the frontend
 
-### Frontend
-
-Copy the example env file if needed:
-
-```bash
-cp .env.example .env
-```
-
-Set the API base URL:
+In the repository root, create a `.env` file with the API URL:
 
 ```env
 VITE_API_URL=http://localhost:3000/api/v1
 ```
 
-### Backend
+The frontend defaults to this URL if `VITE_API_URL` is not set.
 
-The backend environment file lives in `blog-api/.env` and contains the required runtime values, including:
+### 2. Configure and start the API
 
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SECRET_KEY`
-- `SUPABASE_JWKS_URL`
-- `DATABASE_URL`
-- `SECRET_KEY`
-- `GOOGLE_APP_EMAIL`
-- `GOOGLE_APP_PASSWORD`
-
-Do not commit secret values to version control.
-
-## Install dependencies
-
-### Frontend
-
-```bash
-npm install
-```
-
-### Backend
+Add the required environment values to `blog-api/.env`. Use `blog-api/.env.example` as a guide; do not commit actual credentials or secret keys.
 
 ```bash
 cd blog-api
 npm install --legacy-peer-deps
-```
-
-## Run the app
-
-### Backend
-
-```bash
-cd blog-api
+npm run db:generate
+npm run migrate
 npm run start:dev
 ```
 
-The API runs on:
+The API is served at `http://localhost:3000/api/v1`. For local development, configure `CORS_ORIGINS` to include the frontend origin if it is not already allowed, for example:
 
-```text
-http://localhost:3000/api/v1
+```env
+CORS_ORIGINS="http://localhost:5173,http://localhost:8443"
 ```
 
-### Frontend
+### 3. Start the frontend
 
-In the project root:
+From the repository root, in another terminal:
 
 ```bash
+npm install
 npm run dev
 ```
 
-The frontend typically runs on the local Vite dev server (default port 5173 unless configured otherwise).
+Open the Vite URL shown in the terminal. In this workspace the development server is commonly available at `http://localhost:8443`.
 
-## Useful backend commands
+## Handy commands
+
+Run from the repository root for the frontend:
 
 ```bash
-cd blog-api
+npm run dev
 npm run build
-npm run start:prod
+```
+
+Run from `blog-api/` for the backend:
+
+```bash
+npm run start:dev
+npm run build
 npm run migrate
 npm run seed
 npm run test
 ```
 
-## Features
+## Project layout
 
-- Public blog home and article pages
-- Search, category filtering, and sorting
-- Featured stories and popular views
-- Owner login and protected author routes
-- Post drafting and publishing workflow
-- Media preview images and video uploads
-- Contact form and newsletter signup
-- API-driven data fetching instead of local mock data
+```text
+.
+├── public/             # App assets and README screenshots
+├── src/                # React frontend
+│   ├── components/     # Shared layout, tiles, and UI
+│   ├── hooks/          # React data hooks
+│   ├── lib/            # API and shared utilities
+│   ├── pages/          # Home, blog, post, login, and editor pages
+│   └── services/       # API-backed services
+└── blog-api/           # NestJS API and Prisma schema
+```
 
-## Notes
+## Security note
 
-- The frontend expects the API at `VITE_API_URL` and will redirect unauthenticated users to `/login` when owner-only routes are accessed.
-- The backend and frontend are intended to run together for the full application experience.
-- This repository is structured as a monorepo-style app with a separate API project under `blog-api/`.
+Never place backend secrets in frontend environment variables or commit `.env` files. Only the public API base URL belongs in the frontend configuration.
+
+---
+
+<div align="center">
+Made for the moments in between.
+</div>
