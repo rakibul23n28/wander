@@ -1,0 +1,10 @@
+{
+  "description": "Create and manage a personal blog effortlessly with a visually stunning tile-wall layout, featuring rich media support and intuitive navigation.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
