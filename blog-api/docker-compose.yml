@@ -1,0 +1,40 @@
+version: '3.9'
+services:
+  api:
+    build: .
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/blog?schema=public}
+      JWT_SECRET: ${JWT_SECRET:-replace-me-with-a-real-secret}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-supersecret123}
+      OWNER_NAME: ${OWNER_NAME:-Blog Owner}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3000}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      VIEW_SALT_SECRET: ${VIEW_SALT_SECRET:-replace-me-with-one}
+      SUPABASE_URL: ${SUPABASE_URL:-https://example.supabase.co}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-demo-key}
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-blog-media}
+      SWAGGER_ENABLED: 'true'
+      SEED_ON_START: ${SEED_ON_START:-true}
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: blog
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
