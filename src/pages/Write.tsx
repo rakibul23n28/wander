@@ -25,6 +25,7 @@ import { PageShell } from "../components/layout/Layout"
 import { PostUnit } from "../components/tiles/Tiles"
 import { PostView } from "./Post"
 import { useUI } from "../components/ui/Context"
+import { uploadWithProgress } from "../lib/api"
 import {
   getPostById,
   createPost,
@@ -178,10 +179,18 @@ export default function Write() {
       return
     }
     try {
-      media({ previewImage: { blob: await compress(file), alt: post.title } })
+      const normalized = await compress(file)
+      const result = await uploadWithProgress("admin/media/image", normalized, (percent) => setProgress(percent), {})
+      const id = typeof result === "object" && result && "id" in result ? String((result as { id?: string }).id) : undefined
+      media({ previewImage: { blob: normalized, alt: post.title, id } })
       setError("")
-    } catch {
-      setError("Could not read this image.")
+    } catch (err) {
+      const message = err && typeof err === "object" && "message" in err
+        ? String((err as { message?: string }).message)
+        : "Could not upload this image."
+      setError(message)
+    } finally {
+      setProgress(0)
     }
   }
   async function uploadVideo(file?: File) {
@@ -193,11 +202,20 @@ export default function Write() {
       setError("Choose an MP4 or WebM video under 100 MB.")
       return
     }
-    setProgress(25)
-    await new Promise((r) => setTimeout(r, 100))
-    media({ video: { blob: file } })
-    setProgress(100)
-    setTimeout(() => setProgress(0), 700)
+    try {
+      setProgress(25)
+      const result = await uploadWithProgress("admin/media/video", file, (percent) => setProgress(percent), {})
+      const id = typeof result === "object" && result && "id" in result ? String((result as { id?: string }).id) : undefined
+      media({ video: { blob: file, id } })
+      setProgress(100)
+      setTimeout(() => setProgress(0), 700)
+      setError("")
+    } catch (err) {
+      const message = err && typeof err === "object" && "message" in err
+        ? String((err as { message?: string }).message)
+        : "Could not upload this video."
+      setError(message)
+    }
   }
   function addTag() {
     const value = tag.trim().replace(/,$/, "")
@@ -236,6 +254,8 @@ export default function Write() {
               .querySelector("p")?.textContent || ""
           ).slice(0, 160),
         updatedAt: new Date().toISOString(),
+        featured: !!post.featured,
+        publishedAt: post.publishedAt || (status === "published" ? new Date().toISOString() : null),
       }
       await createPost(p)
       setPost(p)
@@ -431,6 +451,14 @@ export default function Write() {
                 {error}
               </p>
             )}
+            <label className="featured-toggle">
+              <input
+                type="checkbox"
+                checked={!!post.featured}
+                onChange={(e) => change({ featured: e.target.checked })}
+              />
+              Featured on the home page
+            </label>
             <button
               className="button"
               disabled={busy}

@@ -1,7 +1,6 @@
-import { getPostById, incrementPostViews } from "./posts"
+import { apiFetch } from "../lib/api"
+import { getPostById } from "./posts"
 
-// Swap point for a global counter later: POST /api/posts/:id/view.
-// Today counts belong only to this browser's IndexedDB, not all readers.
 const pending = new Map<string, Promise<number>>()
 
 export async function getViews(postId: string): Promise<number> {
@@ -16,9 +15,11 @@ export async function incrementView(postId: string): Promise<number> {
     if (sessionStorage.getItem(key)) return getViews(postId)
     const post = await getPostById(postId)
     if (!post || post.status !== "published") return post?.views ?? 0
-    const count = await incrementPostViews(postId)
+    const response = await apiFetch<{ views?: number }>(`posts/${postId}/view`, {
+      method: "POST",
+    })
     sessionStorage.setItem(key, "true")
-    return count
+    return response.views ?? post.views
   })()
   pending.set(postId, operation)
   try {

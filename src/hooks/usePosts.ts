@@ -5,13 +5,22 @@ export function usePosts() {
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     let active = true
-    const load = () =>
-      listPosts().then((p) => {
-        if (active) {
-          setPosts(p)
-          setLoading(false)
-        }
-      })
+    const load = () => {
+      setLoading(true)
+      listPosts({ limit: 50, sort: "newest" })
+        .then((p) => {
+          if (active) {
+            setPosts(p)
+            setLoading(false)
+          }
+        })
+        .catch(() => {
+          if (active) setPosts([])
+        })
+        .finally(() => {
+          if (active) setLoading(false)
+        })
+    }
     load()
     window.addEventListener("posts-updated", load)
     return () => {
@@ -31,24 +40,14 @@ export function usePostMedia(post: Post) {
     video: post.media.video?.url || "",
   })
   useEffect(() => {
-    const urls: string[] = []
-    const object = (blob?: Blob, url?: string) => {
-      if (blob) {
-        const u = URL.createObjectURL(blob)
-        urls.push(u)
-        return u
-      }
-      return url || ""
-    }
     setMedia({
       image:
-        object(post.media.previewImage?.blob, post.media.previewImage?.url) ||
+        post.media.previewImage?.url ||
         (post.media.youtubeId
           ? `https://img.youtube.com/vi/${post.media.youtubeId}/hqdefault.jpg`
           : ""),
-      video: object(post.media.video?.blob, post.media.video?.url),
+      video: post.media.video?.url || "",
     })
-    return () => urls.forEach((u) => URL.revokeObjectURL(u))
   }, [post])
   return media
 }

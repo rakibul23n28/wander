@@ -1,6 +1,6 @@
-import { get, set, del, entries, update } from "idb-keyval"
+import { apiFetch } from "../lib/api"
 import { sanitize } from "../lib/utils"
-import { seedPosts } from "../data/seed"
+
 export type Post = {
   id: string
   slug: string
@@ -8,98 +8,210 @@ export type Post = {
   excerpt: string
   content: string
   category: string
+  categorySlug?: string
   tags: string[]
   status: "published" | "draft"
   views: number
   featured?: boolean
   isSample?: boolean
+  previewImageId?: string
+  videoMediaId?: string
   createdAt: string
   updatedAt: string
+  publishedAt?: string | null
   media: {
     type: "image" | "video" | "youtube"
     previewImage?: {
       url?: string
       blob?: Blob
       alt?: string
+      id?: string
     }
     video?: {
       url?: string
       blob?: Blob
+      id?: string
     }
     youtubeUrl?: string
     youtubeId?: string
   }
 }
-// Local storage boundary: replace these functions with REST calls when a backend is needed.
-let init: Promise<void> | null = null
-function initialize() {
-  return (init ??= (async () => {
-    if (!(await get("wander:seeded"))) {
-      for (const p of seedPosts) await set(`post:${p.id}`, p)
-      await set("wander:seeded", true)
-    }
-    // Upgrade existing local records without resetting edited stories or counts.
-    for (const [key, value] of await entries()) {
-      if (String(key).startsWith("post:") && value.views == null) {
-        const sample =
-          value.isSample && seedPosts.find((p) => p.id === value.id)
-        await set(key, { ...value, views: sample ? sample.views : 0 })
-      }
-    }
-  })())
+
+type APIListResponse = {
+  items: Post[]
+  meta: { total: number; page: number; limit: number; totalPages: number; hasMore: boolean }
 }
-export async function listPosts() {
-  await initialize()
-  return (await entries())
-    .filter(([k]) => String(k).startsWith("post:"))
-    .map(([, v]) => v as Post)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+
+type PostPayload = Omit<Post, "categorySlug"> & {
+  category?: string
+  categorySlug?: string
+  publishedAt?: string | null
+  previewImageId?: string
+  videoMediaId?: string
+  youtubeUrl?: string
+  youtubeId?: string
 }
-export async function getPostById(id: string) {
-  await initialize()
-  return get<Post>(`post:${id}`)
-}
-export async function getPostBySlug(slug: string) {
-  return (await listPosts()).find((p) => p.slug === slug)
-}
-export async function createPost(post: Post) {
-  const all = await listPosts()
-  if (all.some((p) => p.slug === post.slug && p.id !== post.id))
-    throw new Error("This slug is already in use.")
-  const existing = all.find((p) => p.id === post.id)
-  const p = {
-    ...post,
-    views: existing?.views ?? post.views ?? 0,
-    content: sanitize(post.content),
+
+function mapPost(record: Partial<PostPayload> & { id?: string }): Post {
+  const media = record.media ?? {}
+  return {
+    id: record.id ?? "",
+    slug: record.slug ?? "",
+    title: record.title ?? "",
+    excerpt: record.excerpt ?? "",
+    content: record.content ?? "",
+    category: record.category ?? record.categorySlug ?? "General",
+    categorySlug: record.categorySlug,
+    tags: record.tags ?? [],
+    status: record.status === "draft" ? "draft" : "published",
+    views: record.views ?? 0,
+    featured: !!record.featured,
+    isSample: !!record.isSample,
+    createdAt: record.createdAt ?? record.publishedAt ?? new Date().toISOString(),
+    updatedAt: record.updatedAt ?? record.createdAt ?? new Date().toISOString(),
+    publishedAt: record.publishedAt ?? null,
+      previewImageId: record.previewImageId ?? media.previewImage?.id,
+    videoMediaId: record.videoMediaId ?? media.video?.id,
+    media: {
+      type: media.type ?? "image",
+      previewImage: media.previewImage
+        ? {
+            ...media.previewImage,
+            alt: media.previewImage.alt ?? "",
+          }
+        : undefined,
+      video: media.video ? { ...media.video } : undefined,
+      youtubeUrl: media.youtubeUrl ?? record.youtubeUrl ?? undefined,
+      youtubeId: media.youtubeId ?? record.youtubeId ?? undefined,
+    },
   }
-  await set(`post:${p.id}`, p)
-  window.dispatchEvent(new Event("posts-updated"))
-  return p
 }
-export async function updatePost(id: string, post: Post) {
-  return createPost({ ...post, id, updatedAt: new Date().toISOString() })
+
+function normalizeCollection(payload: unknown): Post[] {
+  if (Array.isArray(payload)) return payload.map((item) => mapPost(item as PostPayload))
+  if (payload && typeof payload === "object") {
+    const items = (payload as { items?: unknown[] }).items ?? []
+    if (Array.isArray(items)) return items.map((item) => mapPost(item as PostPayload))
+  }
+  return []
 }
-export async function deletePost(id: string) {
-  await del(`post:${id}`)
-  window.dispatchEvent(new Event("posts-updated"))
-}
-// Atomic counter-only write: does not change the story's editorial updatedAt.
-export async function incrementPostViews(id: string) {
-  await initialize()
-  let count = 0
-  await update<Post>(`post:${id}`, (post) => {
-    if (!post) throw new Error("Story not found.")
-    count = post.views ?? 0
-    if (post.status !== "published") return post
-    count++
-    return { ...post, views: count }
+
+export async function listPosts(params: {
+  q?: string
+  category?: string
+  tag?: string
+  sort?: string
+  page?: number
+  limit?: number
+} = {}) {
+  const payload = await apiFetch<APIListResponse | PostPayload[] | null>("posts", {
+    query: {
+      q: params.q,
+      category: params.category,
+      tag: params.tag,
+      sort: params.sort,
+      page: params.page,
+      limit: params.limit ?? 12,
+    },
   })
+  const items = normalizeCollection(payload)
+  return items.sort((a, b) => {
+    const aDate = new Date(a.publishedAt || a.createdAt).getTime()
+    const bDate = new Date(b.publishedAt || b.createdAt).getTime()
+    const order = params.sort === "oldest" ? aDate - bDate : bDate - aDate
+    if (params.sort === "views") return (b.views ?? 0) - (a.views ?? 0) || order
+    if (params.sort === "az") return a.title.localeCompare(b.title)
+    return order
+  })
+}
+
+export async function getPostById(id: string) {
+  const list = await listPosts({ limit: 999 })
+  return list.find((post) => post.id === id) || null
+}
+
+export async function getPostBySlug(slug: string) {
+  const record = await apiFetch<PostPayload>(`posts/${encodeURIComponent(slug)}`)
+  return mapPost(record)
+}
+
+export async function createPost(post: Post) {
+  const payload = await apiFetch<PostPayload>("admin/posts", {
+    method: "POST",
+    body: {
+      ...post,
+      title: post.title.trim(),
+      slug: post.slug || "untitled",
+      content: sanitize(post.content),
+      excerpt: post.excerpt || "",
+      category: post.category,
+      status: post.status === "published" ? "published" : "draft",
+      featured: !!post.featured,
+      media: post.media,
+      publishedAt: post.publishedAt || post.createdAt,
+    },
+  })
+  const next = mapPost(payload)
   window.dispatchEvent(new Event("posts-updated"))
-  return count
+  return next
 }
+
+export async function updatePost(id: string, post: Post) {
+  const payload = await apiFetch<PostPayload>(`admin/posts/${id}`, {
+    method: "PATCH",
+    body: {
+      ...post,
+      title: post.title.trim(),
+      slug: post.slug || "untitled",
+      content: sanitize(post.content),
+      excerpt: post.excerpt || "",
+      category: post.category,
+      status: post.status === "published" ? "published" : "draft",
+      featured: !!post.featured,
+      media: post.media,
+      publishedAt: post.publishedAt || post.createdAt,
+    },
+  })
+  const next = mapPost(payload)
+  window.dispatchEvent(new Event("posts-updated"))
+  return next
+}
+
+export async function deletePost(id: string) {
+  await apiFetch(`admin/posts/${id}`, { method: "DELETE" })
+  window.dispatchEvent(new Event("posts-updated"))
+}
+
+export async function incrementPostViews(id: string) {
+  const res = await apiFetch<{ views?: number; counted?: boolean }>(`posts/${id}/view`, {
+    method: "POST",
+  })
+  return res.views ?? 0
+}
+
 export async function listCategories() {
-  return [...new Set((await listPosts()).map((p) => p.category))]
+  const payload = await apiFetch<Array<{ name?: string; slug?: string; id?: string }>>("categories")
+  return payload.map((category) => category.name || category.slug || "General")
 }
+
+export async function deleteSamplePosts() {
+  await apiFetch("admin/posts/samples", { method: "DELETE" })
+  window.dispatchEvent(new Event("posts-updated"))
+}
+
+export async function getStats() {
+  return apiFetch<{ totalViews?: number; publishedPosts?: number; draftPosts?: number }>("admin/stats")
+}
+
+export async function checkSlug(slug: string, excludeId?: string) {
+  return apiFetch<{ available: boolean; suggestion: string }>("admin/posts/check-slug", {
+    query: {
+      slug,
+      excludeId,
+    },
+  })
+}
+
 export async function saveLocalValue(key: string, value: unknown) {
-  await set(`local:${key}`, value)
+  localStorage.setItem(`local:${key}`, JSON.stringify(value))
 }

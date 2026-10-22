@@ -15,11 +15,13 @@ import Blog from "./pages/Blog"
 import Post, { NotFound } from "./pages/Post"
 import About from "./pages/About"
 import Contact from "./pages/Contact"
+import Login from "./pages/Login"
 const Write = lazy(() => import("./pages/Write"))
 const Manage = lazy(() => import("./pages/Manage"))
 function Owner({ children }: { children: React.ReactNode }) {
-  const { isOwner } = useUI()
-  return isOwner ? <>{children}</> : <Navigate to="/" replace />
+  const { isOwner, loadingAuth } = useUI()
+  if (loadingAuth) return <div className="route-loading">Checking access…</div>
+  return isOwner ? <>{children}</> : <Navigate to="/login" replace />
 }
 function Content() {
   const location = useLocation()
@@ -43,6 +45,7 @@ function Content() {
         >
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/:slug" element={<Post />} />
             <Route path="/about" element={<About />} />

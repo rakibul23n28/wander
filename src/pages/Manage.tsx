@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   FiPlus,
@@ -12,7 +12,7 @@ import {
 } from "react-icons/fi"
 import { PageShell } from "../components/layout/Layout"
 import { usePosts, usePostMedia } from "../hooks/usePosts"
-import { deletePost, type Post } from "../services/posts"
+import { deletePost, deleteSamplePosts, getStats, type Post } from "../services/posts"
 import { useUI } from "../components/ui/Context"
 import { Views } from "../components/ui/Views"
 function Row({ post }: { post: Post }) {
@@ -66,10 +66,16 @@ function Row({ post }: { post: Post }) {
 }
 export default function Manage() {
   const { posts } = usePosts()
-  const { toast, confirmAction, setOverlayOpen } = useUI()
+  const { toast, confirmAction } = useUI()
   const [q, setQ] = useState("")
   const [tab, setTab] = useState("All")
   const [viewsSort, setViewsSort] = useState<"asc" | "desc" | null>(null)
+  const [totalViews, setTotalViews] = useState(0)
+  useEffect(() => {
+    getStats()
+      .then((stats) => setTotalViews(stats.totalViews ?? posts.reduce((sum, p) => sum + p.views, 0)))
+      .catch(() => setTotalViews(posts.reduce((sum, p) => sum + p.views, 0)))
+  }, [posts])
   const filtered = posts
     .filter(
       (p) =>
@@ -91,8 +97,8 @@ export default function Manage() {
       <section className="manage-content">
         <div className="total-views">
           <span>Total views</span>
-          <Views count={posts.reduce((sum, p) => sum + p.views, 0)} />
-          <small>Across all stories · this browser only</small>
+          <Views count={totalViews} />
+          <small>Across all stories · live totals</small>
         </div>
         <div className="manage-heading">
           <div className="segmented">
@@ -142,11 +148,7 @@ export default function Manage() {
                     "Remove all sample stories? Your own stories will be kept.",
                   )
                 ) {
-                  await Promise.all(
-                    posts
-                      .filter((p) => p.isSample)
-                      .map((p) => deletePost(p.id)),
-                  )
+                  await deleteSamplePosts()
                   toast("A clean page. Sample stories removed.")
                 }
               }}
@@ -186,8 +188,7 @@ export default function Manage() {
           </div>
         )}
         <p className="local-note">
-          Your stories are stored in this browser. Clearing site data will
-          remove them.
+          Your stories are synced with the blog API.
         </p>
       </section>
     </PageShell>

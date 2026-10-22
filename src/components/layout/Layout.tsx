@@ -24,6 +24,7 @@ const links = [
 export function Profile() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const { isOwner, user, logout } = useUI()
   useEffect(() => {
     const close = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
@@ -50,16 +51,42 @@ export function Profile() {
       </button>
       {open && (
         <div className="profile-menu">
-          {[
-            ["/write", "Write new post"],
-            ["/manage", "Manage posts"],
-            ["/about", "About me"],
-          ].map(([url, label]) => (
-            <Link to={url} key={url} onClick={() => setOpen(false)}>
-              {label}
-              <FiArrowUpRight />
-            </Link>
-          ))}
+          {isOwner ? (
+            <>
+              {[
+                ["/write", "Write new post"],
+                ["/manage", "Manage posts"],
+                ["/about", "About me"],
+              ].map(([url, label]) => (
+                <Link to={url} key={url} onClick={() => setOpen(false)}>
+                  {label}
+                  <FiArrowUpRight />
+                </Link>
+              ))}
+              <button
+                className="logout-link"
+                onClick={() => {
+                  logout()
+                  setOpen(false)
+                }}
+              >
+                Log out
+                <FiArrowUpRight />
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/about" onClick={() => setOpen(false)}>
+                About me
+                <FiArrowUpRight />
+              </Link>
+              <Link to="/login" onClick={() => setOpen(false)}>
+                Log in
+                <FiArrowUpRight />
+              </Link>
+            </>
+          )}
+          {user && <small className="username">{user.email}</small>}
         </div>
       )}
     </div>
@@ -214,10 +241,24 @@ export function Footer() {
         onSubmit={async (e) => {
           e.preventDefault()
           const f = e.currentTarget
-          const email = new FormData(f).get("email")
-          await saveLocalValue(`subscriber:${email}`, email)
-          toast("You’re on the list. Stay curious!")
-          f.reset()
+          const data = new FormData(f)
+          const email = String(data.get("email") || "")
+          const website = String(data.get("website") || "")
+          if (website) return
+          try {
+            await fetch(`${(import.meta.env.VITE_API_URL || "http://localhost:3000/api/v1").replace(/\/$/, "")}/subscribers`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email }),
+            }).then(async (res) => {
+              const payload = await res.json().catch(() => null)
+              if (!res.ok) throw new Error(payload?.message || "Could not subscribe.")
+            })
+            toast("You’re on the list. Stay curious!")
+            f.reset()
+          } catch (error) {
+            toast(error instanceof Error ? error.message : "Could not subscribe.")
+          }
         }}
       >
         <label htmlFor="newsletter">Letters from the road.</label>
@@ -229,6 +270,7 @@ export function Footer() {
             placeholder="Your email address"
             required
           />
+          <input name="website" className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" />
           <button aria-label="Subscribe to newsletter">
             <FiSend />
           </button>

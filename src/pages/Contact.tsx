@@ -58,8 +58,7 @@ export default function Contact() {
               <FiCheck />
               <h2>Thanks, {success}!</h2>
               <p>
-                Your message is saved on this device for this demo. For a real
-                conversation, send me an email.
+                Your note has been sent. I’ll get back to you soon.
               </p>
               <button className="button" onClick={() => setSuccess("")}>
                 Write another note
@@ -87,9 +86,13 @@ export default function Contact() {
                   await sendMessage(values)
                   setSuccess(values.name.split(" ")[0])
                   setMessage("")
-                  toast("Your demo message has been saved locally.")
-                } catch {
-                  toast("Could not save. Please try again.")
+                  toast("Your message has been sent.")
+                } catch (error) {
+                  const msg =
+                    error && typeof error === "object" && "message" in error
+                      ? String((error as { message?: string }).message)
+                      : "Could not save. Please try again."
+                  toast(msg)
                 } finally {
                   setBusy(false)
                 }
@@ -150,7 +153,7 @@ export default function Contact() {
                 <FiSend />
               </button>
               <p className="form-note">
-                Frontend demo · Messages stay on this device.
+                I’ll usually reply within a day or two.
               </p>
             </form>
           )}
