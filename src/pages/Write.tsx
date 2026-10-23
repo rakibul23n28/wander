@@ -27,8 +27,9 @@ import { PostView } from "./Post"
 import { useUI } from "../components/ui/Context"
 import { uploadWithProgress } from "../lib/api"
 import {
-  getPostById,
+  getAdminPostById,
   createPost,
+  updatePost,
   deletePost,
   type Post,
 } from "../services/posts"
@@ -66,6 +67,21 @@ async function compress(file: File) {
     ),
   )
 }
+
+function getUploadedMedia(result: unknown) {
+  if (
+    result &&
+    typeof result === "object" &&
+    "id" in result &&
+    typeof result.id === "string" &&
+    "url" in result &&
+    typeof result.url === "string"
+  ) {
+    return { id: result.id, url: result.url }
+  }
+  throw new Error("Upload completed without a media ID and URL.")
+}
+
 export default function Write() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -100,7 +116,7 @@ export default function Write() {
   })
   useEffect(() => {
     if (id)
-      getPostById(id).then((p) => {
+      getAdminPostById(id).then((p) => {
         if (p) {
           setPost(p)
           editor?.commands.setContent(p.content)
@@ -179,10 +195,27 @@ export default function Write() {
       return
     }
     try {
-      const normalized = await compress(file)
-      const result = await uploadWithProgress("admin/media/image", normalized, (percent) => setProgress(percent), {})
-      const id = typeof result === "object" && result && "id" in result ? String((result as { id?: string }).id) : undefined
-      media({ previewImage: { blob: normalized, alt: post.title, id } })
+      const blob = await compress(file)
+      const normalized = new File(
+        [blob],
+        `${file.name.replace(/\.[^.]+$/, "")}.webp`,
+        { type: "image/webp" },
+      )
+      const uploaded = getUploadedMedia(
+        await uploadWithProgress(
+          "admin/media/image",
+          normalized,
+          (percent) => setProgress(percent),
+        ),
+      )
+      media({
+        previewImage: {
+          blob: normalized,
+          url: uploaded.url,
+          alt: post.title,
+          id: uploaded.id,
+        },
+      })
       setError("")
     } catch (err) {
       const message = err && typeof err === "object" && "message" in err
@@ -197,16 +230,21 @@ export default function Write() {
     if (!file) return
     if (
       !["video/mp4", "video/webm"].includes(file.type) ||
-      file.size > 100 * 1024 * 1024
+      file.size > 50 * 1024 * 1024
     ) {
-      setError("Choose an MP4 or WebM video under 100 MB.")
+      setError("Choose an MP4 or WebM video under 50 MB.")
       return
     }
     try {
       setProgress(25)
-      const result = await uploadWithProgress("admin/media/video", file, (percent) => setProgress(percent), {})
-      const id = typeof result === "object" && result && "id" in result ? String((result as { id?: string }).id) : undefined
-      media({ video: { blob: file, id } })
+      const uploaded = getUploadedMedia(
+        await uploadWithProgress(
+          "admin/media/video",
+          file,
+          (percent) => setProgress(percent),
+        ),
+      )
+      media({ video: { blob: file, id: uploaded.id, url: uploaded.url } })
       setProgress(100)
       setTimeout(() => setProgress(0), 700)
       setError("")
@@ -257,8 +295,8 @@ export default function Write() {
         featured: !!post.featured,
         publishedAt: post.publishedAt || (status === "published" ? new Date().toISOString() : null),
       }
-      await createPost(p)
-      setPost(p)
+      const savedPost = id ? await updatePost(id, p) : await createPost(p)
+      setPost(savedPost)
       setDirty(false)
       setError("")
       toast(
@@ -266,7 +304,7 @@ export default function Write() {
           ? "Your story is out in the world."
           : "Draft saved. Take your time.",
       )
-      if (!id) navigate(`/write/${p.id}`, { replace: true })
+      if (!id) navigate(`/write/${savedPost.id}`, { replace: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.")
     } finally {
@@ -342,16 +380,37 @@ export default function Write() {
           input.accept = "image/jpeg,image/png,image/webp"
           input.onchange = async () => {
             const f = input.files?.[0]
-            if (f && f.size < 8 * 1024 * 1024) {
-              const blob = await compress(f)
-              const reader = new FileReader()
-              reader.onload = () =>
+            if (f && f.size <= 8 * 1024 * 1024) {
+              try {
+                const blob = await compress(f)
+                const normalized = new File(
+                  [blob],
+                  `${f.name.replace(/\.[^.]+$/, "")}.webp`,
+                  { type: "image/webp" },
+                )
+                const uploaded = getUploadedMedia(
+                  await uploadWithProgress(
+                    "admin/media/image",
+                    normalized,
+                    (percent) => setProgress(percent),
+                  ),
+                )
                 editor
                   ?.chain()
                   .focus()
-                  .setImage({ src: String(reader.result) })
+                  .setImage({ src: uploaded.url, alt: f.name })
                   .run()
-              reader.readAsDataURL(blob)
+              } catch (err) {
+                const message =
+                  err && typeof err === "object" && "message" in err
+                    ? String(err.message)
+                    : "Could not upload this image."
+                setError(message)
+              } finally {
+                setProgress(0)
+              }
+            } else if (f) {
+              setError("Choose an image under 8 MB.")
             }
           }
           input.click()
@@ -665,7 +724,7 @@ export default function Write() {
                 >
                   <FiUploadCloud />
                   <span>Upload MP4 or WebM</span>
-                  <small>Up to 100 MB · stored on your device</small>
+                  <small>Up to 50 MB · stored in media storage</small>
                 </button>
                 {progress > 0 && <progress value={progress} max={100} />}
                 <input

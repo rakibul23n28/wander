@@ -3,6 +3,11 @@ export type ApiErrorShape = {
   message: string
 }
 
+type ApiFetchOptions = Omit<RequestInit, "body"> & {
+  body?: BodyInit | object | null
+  query?: Record<string, unknown>
+}
+
 const DEFAULT_API_URL = "http://localhost:3000/api/v1"
 
 export function getApiBaseUrl() {
@@ -64,23 +69,32 @@ function buildUrl(path: string, query?: Record<string, unknown>) {
 
 export async function apiFetch<T = unknown>(
   path: string,
-  options: RequestInit & { query?: Record<string, unknown> } = {},
+  options: ApiFetchOptions = {},
 ): Promise<T> {
   const { query, headers, body, ...rest } = options
   const token = getAuthToken()
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData
+  const isJsonBody =
+    body !== undefined &&
+    body !== null &&
+    typeof body === "object" &&
+    !isFormData &&
+    !(typeof Blob !== "undefined" && body instanceof Blob) &&
+    !(body instanceof ArrayBuffer) &&
+    !ArrayBuffer.isView(body) &&
+    !(body instanceof URLSearchParams)
   const init: RequestInit = {
     ...rest,
     headers: {
       ...(headers as Record<string, string> | undefined),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(body && !isFormData && !(headers as Record<string, string> | undefined)?.["Content-Type"]
+      ...(isJsonBody && !(headers as Record<string, string> | undefined)?.["Content-Type"]
         ? { "Content-Type": "application/json" }
         : {}),
     },
   }
 
-  if (body !== undefined && body !== null && typeof body !== "string" && !(body instanceof FormData)) {
+  if (isJsonBody) {
     init.body = JSON.stringify(body)
   } else if (body !== undefined && body !== null) {
     init.body = body as BodyInit

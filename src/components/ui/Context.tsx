@@ -78,11 +78,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function login(email: string, password: string) {
-    const response = await apiFetch<{ token: string; user: User }>("auth/login", {
+    const response = await apiFetch<{ accessToken: string; user: User }>("auth/login", {
       method: "POST",
       body: { email, password },
     })
-    setAuthToken(response.token)
+    setAuthToken(response.accessToken)
     setUser(response.user)
   }
 

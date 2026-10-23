@@ -47,13 +47,14 @@ type PostPayload = Omit<Post, "categorySlug"> & {
   categorySlug?: string
   publishedAt?: string | null
   previewImageId?: string
+  previewMediaId?: string
   videoMediaId?: string
   youtubeUrl?: string
   youtubeId?: string
 }
 
 function mapPost(record: Partial<PostPayload> & { id?: string }): Post {
-  const media = record.media ?? {}
+  const media: Post["media"] = record.media ?? { type: "image" }
   return {
     id: record.id ?? "",
     slug: record.slug ?? "",
@@ -70,17 +71,24 @@ function mapPost(record: Partial<PostPayload> & { id?: string }): Post {
     createdAt: record.createdAt ?? record.publishedAt ?? new Date().toISOString(),
     updatedAt: record.updatedAt ?? record.createdAt ?? new Date().toISOString(),
     publishedAt: record.publishedAt ?? null,
-      previewImageId: record.previewImageId ?? media.previewImage?.id,
+    previewImageId:
+      record.previewImageId ?? record.previewMediaId ?? media.previewImage?.id,
     videoMediaId: record.videoMediaId ?? media.video?.id,
     media: {
       type: media.type ?? "image",
       previewImage: media.previewImage
         ? {
             ...media.previewImage,
+            id:
+              media.previewImage.id ??
+              record.previewImageId ??
+              record.previewMediaId,
             alt: media.previewImage.alt ?? "",
           }
         : undefined,
-      video: media.video ? { ...media.video } : undefined,
+      video: media.video
+        ? { ...media.video, id: media.video.id ?? record.videoMediaId }
+        : undefined,
       youtubeUrl: media.youtubeUrl ?? record.youtubeUrl ?? undefined,
       youtubeId: media.youtubeId ?? record.youtubeId ?? undefined,
     },
@@ -130,26 +138,47 @@ export async function getPostById(id: string) {
   return list.find((post) => post.id === id) || null
 }
 
+export async function getAdminPostById(id: string) {
+  const payload = await apiFetch<PostPayload>(
+    `admin/posts/${encodeURIComponent(id)}`,
+  )
+  return mapPost(payload)
+}
+
 export async function getPostBySlug(slug: string) {
   const record = await apiFetch<PostPayload>(`posts/${encodeURIComponent(slug)}`)
   return mapPost(record)
 }
 
+function buildPostPayload(post: Post) {
+  const mediaType = post.media.type === "video" ? "video" : post.media.type === "youtube" ? "youtube" : "image"
+
+  return {
+    title: post.title.trim(),
+    slug: post.slug || "untitled",
+    content: sanitize(post.content),
+    excerpt: post.excerpt || "",
+    category: post.category,
+    tags: post.tags ?? [],
+    status: post.status === "published" ? "published" : "draft",
+    featured: !!post.featured,
+    isSample: !!post.isSample,
+    publishedAt: post.publishedAt || post.createdAt,
+    mediaType,
+    previewImageId: post.media.previewImage?.id ?? null,
+    previewImageUrl: post.media.previewImage?.url ?? null,
+    previewImageAlt: post.media.previewImage?.alt ?? null,
+    videoMediaId: post.media.video?.id ?? null,
+    videoUrl: post.media.video?.url ?? null,
+    youtubeUrl: post.media.youtubeUrl ?? null,
+    youtubeId: post.media.youtubeId ?? null,
+  }
+}
+
 export async function createPost(post: Post) {
   const payload = await apiFetch<PostPayload>("admin/posts", {
     method: "POST",
-    body: {
-      ...post,
-      title: post.title.trim(),
-      slug: post.slug || "untitled",
-      content: sanitize(post.content),
-      excerpt: post.excerpt || "",
-      category: post.category,
-      status: post.status === "published" ? "published" : "draft",
-      featured: !!post.featured,
-      media: post.media,
-      publishedAt: post.publishedAt || post.createdAt,
-    },
+    body: buildPostPayload(post),
   })
   const next = mapPost(payload)
   window.dispatchEvent(new Event("posts-updated"))
@@ -159,18 +188,7 @@ export async function createPost(post: Post) {
 export async function updatePost(id: string, post: Post) {
   const payload = await apiFetch<PostPayload>(`admin/posts/${id}`, {
     method: "PATCH",
-    body: {
-      ...post,
-      title: post.title.trim(),
-      slug: post.slug || "untitled",
-      content: sanitize(post.content),
-      excerpt: post.excerpt || "",
-      category: post.category,
-      status: post.status === "published" ? "published" : "draft",
-      featured: !!post.featured,
-      media: post.media,
-      publishedAt: post.publishedAt || post.createdAt,
-    },
+    body: buildPostPayload(post),
   })
   const next = mapPost(payload)
   window.dispatchEvent(new Event("posts-updated"))

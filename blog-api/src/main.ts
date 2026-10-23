@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
@@ -24,7 +24,8 @@ async function bootstrap() {
     allowedHeaders: ['Authorization', 'Content-Type'],
   });
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.setGlobalPrefix('api/v1');
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
